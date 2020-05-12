@@ -16,21 +16,7 @@ class ThreadPool{
 	template <class F, class... Args>
 	    auto addTask(F &&f, Args&&... args);
     private:
-	void executeTask(){
-	    while(1){
-		std::function<void()> current_task;
-		{
-		    std::unique_lock<std::mutex> locker(mutex_);
-		    task_cv_.wait(locker, [this]{return !tasks_.empty() || is_shutdown;});
-		    if(is_shutdown || tasks_.empty()){
-			return;
-		    }
-		    current_task = std::move(tasks_.front());
-		    tasks_.pop();
-		}
-		current_task();
-	    }
-	}
+	void executeTask();
 
 	std::mutex mutex_;
 	std::condition_variable task_cv_;
@@ -50,6 +36,22 @@ ThreadPool::~ThreadPool(){
     task_cv_.notify_all();
     for(std::thread &th : workers){
 	th.join();
+    }
+}
+
+void ThreadPool::executeTask(){
+    while(1){
+	std::function<void()> current_task;
+	{
+	    std::unique_lock<std::mutex> locker(mutex_);
+	    task_cv_.wait(locker, [this]{return !tasks_.empty() || is_shutdown;});
+	    if(is_shutdown && tasks_.empty()){
+		return;
+	    }
+	    current_task = std::move(tasks_.front());
+	    tasks_.pop();
+	}
+	current_task();
     }
 }
 
